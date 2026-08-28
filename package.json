@@ -1,0 +1,65 @@
+{
+  "name": "email-manager",
+  "version": "1.0.0",
+  "description": "Windows desktop email account manager",
+  "main": "electron/main.cjs",
+  "author": "Email Manager",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build": "vite build",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+  "lucide-react": "latest",
+  "react": "latest",
+  "react-dom": "latest"
+},
+  "devDependencies": {
+  "@vitejs/plugin-react": "latest",
+  "electron": "latest",
+  "autoprefixer": "latest",
+  "concurrently": "latest",
+  "electron-builder": "latest",
+  "postcss": "latest",
+  "tailwindcss": "3.4.17",
+  "vite": "latest",
+  "wait-on": "latest"
+},
+  "build": {
+    "appId": "com.emailmanager.desktop",
+    "productName": "邮箱账号管理",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/OpenBrowser.ps1",
+        "to": "OpenBrowser.ps1"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "邮箱账号管理-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "邮箱账号管理"
+    }
+  }
+}
