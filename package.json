@@ -1,6 +1,6 @@
 {
   "name": "email-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Windows desktop email account manager",
   "main": "electron/main.cjs",
   "author": "Email Manager",
@@ -9,7 +9,7 @@
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build": "vite build",
     "start": "electron .",
-    "dist": "npm run build && electron-builder --win nsis"
+    "dist": "npm run build && electron-builder --win nsis --publish never"
   },
   "dependencies": {
   "lucide-react": "latest",
