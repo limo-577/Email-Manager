@@ -1,5 +1,4 @@
-```yaml
-name: Release Electron App
+name: Build and Release Windows App
 
 on:
   push:
@@ -8,7 +7,6 @@ on:
 
 jobs:
   build:
-    name: Build Windows App
     runs-on: windows-latest
 
     permissions:
@@ -17,19 +15,18 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout source code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: Build Electron application
+      - name: Build Windows Installer
         run: npm run dist
 
       - name: Attest Build Provenance
@@ -37,9 +34,8 @@ jobs:
         with:
           subject-path: 'release/*.exe'
 
-      - name: Create GitHub Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: 'release/*.exe'
+          files: release/*.exe
           generate_release_notes: true
-```
