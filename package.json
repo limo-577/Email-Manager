@@ -1,6 +1,6 @@
 {
   "name": "email-manager",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Windows desktop email account manager",
   "main": "electron/main.cjs",
   "author": "Email Manager",
