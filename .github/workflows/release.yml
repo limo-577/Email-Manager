@@ -21,13 +21,27 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install Dependencies
         run: npm ci
 
       - name: Build Windows Installer
         run: npm run dist
+
+      - name: Verify Release File
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path release -Filter "*.exe"
+
+          if ($files.Count -eq 0) {
+            throw "No EXE found in release directory"
+          }
+
+          Write-Host "Release files:"
+          $files | ForEach-Object {
+            Write-Host $_.FullName
+          }
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2
