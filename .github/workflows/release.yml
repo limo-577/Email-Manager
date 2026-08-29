@@ -5,51 +5,178 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
 jobs:
   build:
+    name: Build Windows App
     runs-on: windows-latest
 
-    permissions:
-      id-token: write
-      contents: write
-      attestations: write
-
     steps:
+      # 1. 获取代码
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. 安装 Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
 
+      # 3. 安装依赖
       - name: Install Dependencies
         run: npm ci
 
+      # 4. 构建 Windows EXE
       - name: Build Windows Installer
         run: npm run dist
 
-      - name: Verify Release File
+      # 5. 找到最终 EXE
+      - name: Find Windows EXE
+        id: find_exe
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path release -Filter "*.exe"
+          $files = @(Get-ChildItem -Path "$env:GITHUB_WORKSPACE\release" -Filter "*.exe" -File)
 
           if ($files.Count -eq 0) {
-            throw "No EXE found in release directory"
+            Write-Error "No EXE file found in release directory."
+            exit 1
           }
 
-          Write-Host "Release files:"
-          $files | ForEach-Object {
-            Write-Host $_.FullName
+          if ($files.Count -gt 1) {
+            Write-Host "Multiple EXE files found:"
+            $files | ForEach-Object {
+              Write-Host $_.FullName
+            }
+
+            Write-Error "More than one EXE was found. The workflow must identify exactly one final Release EXE."
+            exit 1
           }
 
-      - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: 'release/*.exe'
+          $exe = $files[0]
 
-      - name: Create Release
+          Write-Host "Final EXE:"
+          Write-Host $exe.FullName
+
+          "exe_name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+
+      # 6. 计算构建出来的 EXE SHA256
+      - name: Calculate Build SHA256
+        id: build_hash
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\release" -Filter "*.exe" -File
+
+          $hash = (Get-FileHash -Path $exe.FullName -Algorithm SHA256).Hash.ToLower()
+
+          Write-Host "========================================"
+          Write-Host "BUILD EXE SHA256"
+          Write-Host $hash
+          Write-Host "========================================"
+
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+
+      # 7. 创建 GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.exe
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           generate_release_notes: true
+
+      # 8. 上传最终 EXE 到 Release
+      - name: Upload EXE to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\release" -Filter "*.exe" -File
+
+          if ($exe.Count -ne 1) {
+            throw "Expected exactly one EXE file."
+          }
+
+          Write-Host "Uploading:"
+          Write-Host $exe.FullName
+
+          gh release upload "${{ github.ref_name }}" "$($exe.FullName)" --clobber
+
+      # 9. 从 GitHub Release 下载实际 Asset
+      - name: Download Release Asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\release-asset" | Out-Null
+
+          gh release download "${{ github.ref_name }}" `
+            --pattern "*.exe" `
+            --dir "$env:GITHUB_WORKSPACE\release-asset" `
+            --clobber
+
+          $files = @(Get-ChildItem -Path "$env:GITHUB_WORKSPACE\release-asset" -Filter "*.exe" -File)
+
+          if ($files.Count -ne 1) {
+            Write-Host "Downloaded Release assets:"
+            $files | ForEach-Object {
+              Write-Host $_.FullName
+            }
+
+            throw "Expected exactly one EXE Release asset."
+          }
+
+          Write-Host "Actual Release Asset:"
+          Write-Host $files[0].FullName
+
+      # 10. 验证 Release Asset SHA256
+      - name: Verify Release Asset SHA256
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem `
+            -Path "$env:GITHUB_WORKSPACE\release-asset" `
+            -Filter "*.exe" `
+            -File
+
+          $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower()
+
+          Write-Host "========================================"
+          Write-Host "ORIGINAL BUILD SHA256"
+          Write-Host "${{ steps.build_hash.outputs.sha256 }}"
+          Write-Host ""
+          Write-Host "RELEASE ASSET SHA256"
+          Write-Host $hash
+          Write-Host "========================================"
+
+          if ($hash -ne "${{ steps.build_hash.outputs.sha256 }}") {
+            throw "SHA256 mismatch between build EXE and Release Asset."
+          }
+
+          Write-Host "SHA256 MATCH: OK"
+
+      # 11. 对“实际 Release Asset”进行 SLSA Provenance Attestation
+      - name: Attest Release Asset
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: '${{ github.workspace }}/release-asset/*.exe'
+
+      # 12. 最终验证文件
+      - name: Final Verification
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem `
+            -Path "$env:GITHUB_WORKSPACE\release-asset" `
+            -Filter "*.exe" `
+            -File
+
+          Write-Host "========================================"
+          Write-Host "RELEASE"
+          Write-Host "Tag: ${{ github.ref_name }}"
+          Write-Host "Asset: $($file.Name)"
+          Write-Host "SHA256: $((Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower())"
+          Write-Host "========================================"
+
+          Write-Host "Build, Release upload, SHA256 verification and Attestation completed."
